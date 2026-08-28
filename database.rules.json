@@ -1,0 +1,32 @@
+{
+  "rules": {
+    "dados": {
+      "usuarios": {
+        // Qualquer pessoa pode ler os dados de utilizadores para validação offline/robô
+        ".read": "true",
+        "$userId": {
+          // Apenas o Administrador autenticado pelo UID especificado pode escrever
+          ".write": "auth != null && auth.uid == 'SUA_UID_DE_ADMIN_AQUI'"
+        }
+      },
+      "indices": {
+        // Qualquer pessoa ou robô pode ler os índices de telefones e MT5
+        ".read": "true",
+        // Apenas o Administrador autenticado pelo UID especificado pode escrever
+        ".write": "auth != null && auth.uid == 'SUA_UID_DE_ADMIN_AQUI'"
+      },
+      "parametros": {
+        // Qualquer robô pode ler as configurações de parâmetros
+        ".read": "true",
+        "$mt5Id": {
+          // Apenas o Administrador autenticado pelo UID especificado pode escrever
+          ".write": "auth != null && auth.uid == 'SUA_UID_DE_ADMIN_AQUI'"
+        }
+      },
+      "versao": {
+        ".read": "true",
+        ".write": "auth != null && auth.uid == 'SUA_UID_DE_ADMIN_AQUI'"
+      }
+    }
+  }
+}

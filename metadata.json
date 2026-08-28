@@ -1,0 +1,6 @@
+{
+  "name": "SMS Gateway Fimaster",
+  "description": "Automatizar o cadastro de utilizadores a partir de SMS de transações financeiras.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
