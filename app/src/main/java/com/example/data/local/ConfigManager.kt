@@ -3,8 +3,16 @@ package com.example.data.local
 import android.content.Context
 import android.content.SharedPreferences
 
-class ConfigManager(context: Context) {
+class ConfigManager(private val context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("sms_gateway_prefs", Context.MODE_PRIVATE)
+    private val securePrefs: SharedPreferences by lazy { SecurePrefs.getEncryptedPrefs(context) }
+
+    init {
+        // Automatically migrate legacy tokens from plain SharedPreferences to EncryptedSharedPreferences
+        try {
+            SecurePrefs.migrateFromOldPrefs(context, "sms_gateway_prefs")
+        } catch (_: Exception) {}
+    }
 
     companion object {
         private const val KEY_SALDO_MINIMO = "saldo_minimo"
@@ -59,8 +67,8 @@ class ConfigManager(context: Context) {
         set(value) = prefs.edit().putFloat(KEY_DISCOUNT_PERCENT, value.toFloat()).apply()
 
     var settingsPassword: String
-        get() = prefs.getString(KEY_SETTINGS_PASSWORD, "1234") ?: "1234"
-        set(value) = prefs.edit().putString(KEY_SETTINGS_PASSWORD, value).apply()
+        get() = securePrefs.getString(KEY_SETTINGS_PASSWORD, "1234") ?: "1234"
+        set(value) = securePrefs.edit().putString(KEY_SETTINGS_PASSWORD, value).apply()
 
     var adminTemplatesJson: String
         get() = prefs.getString(KEY_ADMIN_TEMPLATES_JSON, "") ?: ""
@@ -111,8 +119,8 @@ class ConfigManager(context: Context) {
         set(value) = prefs.edit().putString(KEY_SYNC_MODE, value).apply()
 
     var githubToken: String
-        get() = prefs.getString(KEY_GITHUB_TOKEN, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_GITHUB_TOKEN, value).apply()
+        get() = securePrefs.getString(KEY_GITHUB_TOKEN, "") ?: ""
+        set(value) = securePrefs.edit().putString(KEY_GITHUB_TOKEN, value).apply()
 
     var githubRepo: String
         get() = prefs.getString(KEY_GITHUB_REPO, "") ?: ""
@@ -131,8 +139,8 @@ class ConfigManager(context: Context) {
         set(value) = prefs.edit().putString(KEY_FASTAPI_URL, value).apply()
 
     var fastApiToken: String
-        get() = prefs.getString(KEY_FASTAPI_TOKEN, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_FASTAPI_TOKEN, value).apply()
+        get() = securePrefs.getString(KEY_FASTAPI_TOKEN, "") ?: ""
+        set(value) = securePrefs.edit().putString(KEY_FASTAPI_TOKEN, value).apply()
 
     var autoSendSms: Boolean
         get() = prefs.getBoolean(KEY_AUTO_SEND_SMS, true)
