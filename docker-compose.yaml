@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+  gateway:
+    build: .
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - GATEWAY_SECRET=changeme
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
