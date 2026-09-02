@@ -1177,7 +1177,7 @@ fun DashboardScreen(viewModel: SmsGatewayViewModel) {
                         value = simEaPassword.value,
                         onValueChange = { simEaPassword.value = it },
                         label = { Text("Senha enviado do MQL5") },
-                        textStyle = TextStyle(fontSize = 13.sp),
+                        textStyle = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold),
                         modifier = Modifier.fillMaxWidth().testTag("sim_ea_password_input"),
                         singleLine = true,
                         shape = RoundedCornerShape(8.dp),
@@ -1200,7 +1200,7 @@ fun DashboardScreen(viewModel: SmsGatewayViewModel) {
                         value = simPortalPassword.value,
                         onValueChange = { simPortalPassword.value = it },
                         label = { Text("Senha do Portal") },
-                        textStyle = TextStyle(fontSize = 13.sp),
+                        textStyle = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold),
                         modifier = Modifier.fillMaxWidth().testTag("sim_portal_password_input"),
                         singleLine = true,
                         shape = RoundedCornerShape(8.dp),
@@ -2333,6 +2333,9 @@ fun SettingsScreen(viewModel: SmsGatewayViewModel) {
     val mDiscountText by viewModel.discountText.collectAsStateWithLifecycle()
     val mDiscountPercent by viewModel.discountPercent.collectAsStateWithLifecycle()
     val mSettingsPassword by viewModel.settingsPassword.collectAsStateWithLifecycle()
+    val mFirebaseAuthEmail by viewModel.firebaseAuthEmail.collectAsStateWithLifecycle()
+    val mFirebaseAuthPassword by viewModel.firebaseAuthPassword.collectAsStateWithLifecycle()
+    val mFirebaseDbTarget by viewModel.firebaseDbTarget.collectAsStateWithLifecycle()
     val licenseTiers by viewModel.licenseTiers.collectAsStateWithLifecycle()
 
     // Temporary values for forms
@@ -2347,6 +2350,9 @@ fun SettingsScreen(viewModel: SmsGatewayViewModel) {
     val formGhPath = remember(ghPath) { mutableStateOf(ghPath) }
     val formFUrl = remember(fUrl) { mutableStateOf(fUrl) }
     val formFToken = remember(fToken) { mutableStateOf(fToken) }
+    val formFirebaseAuthEmail = remember(mFirebaseAuthEmail) { mutableStateOf(mFirebaseAuthEmail) }
+    val formFirebaseAuthPassword = remember(mFirebaseAuthPassword) { mutableStateOf(mFirebaseAuthPassword) }
+    val formFirebaseDbTarget = remember(mFirebaseDbTarget) { mutableStateOf(mFirebaseDbTarget) }
     val formASms = remember(aSms) { mutableStateOf(aSms) }
     val formASync = remember(aSync) { mutableStateOf(aSync) }
     val formCRegex = remember(cRegex) { mutableStateOf(cRegex) }
@@ -2774,19 +2780,211 @@ fun SettingsScreen(viewModel: SmsGatewayViewModel) {
                         singleLine = true
                     )
                 } else if (formMode.value == ConfigManager.MODE_FIREBASE) {
+                    var authStatusMsg by remember { mutableStateOf<String?>(null) }
+                    var isTestingAuth by remember { mutableStateOf(false) }
+                    var showRulesDialog by remember { mutableStateOf(false) }
+                    val currentAuthStatus = remember(mFirebaseAuthEmail) { viewModel.getFirebaseUserDisplay() }
+
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Sincronização Firebase Ativa", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Filled.CloudSync, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                Text("Sincronização Firebase Ativa", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                            }
                             Text(
-                                "Os dados serão guardados em tempo real no Firestore e Realtime Database usando a configuração do arquivo google-services.json fornecido.",
-                                fontSize = 11.sp,
+                                "Os dados serão sincronizados em tempo real no Firestore e Realtime Database usando a configuração do google-services.json.",
+                                fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(Icons.Filled.AccountCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                    Text("Status Auth: $currentAuthStatus", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                            Text("Banco de Dados Firebase", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Button(
+                                    onClick = { formFirebaseDbTarget.value = ConfigManager.FIREBASE_TARGET_RTDB },
+                                    modifier = Modifier.weight(1f).testTag("firebase_target_rtdb_btn"),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (formFirebaseDbTarget.value == ConfigManager.FIREBASE_TARGET_RTDB) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                        contentColor = if (formFirebaseDbTarget.value == ConfigManager.FIREBASE_TARGET_RTDB) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                ) {
+                                    Text("Realtime DB", fontSize = 11.sp, maxLines = 1)
+                                }
+                                Button(
+                                    onClick = { formFirebaseDbTarget.value = ConfigManager.FIREBASE_TARGET_FIRESTORE },
+                                    modifier = Modifier.weight(1f).testTag("firebase_target_firestore_btn"),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (formFirebaseDbTarget.value == ConfigManager.FIREBASE_TARGET_FIRESTORE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                        contentColor = if (formFirebaseDbTarget.value == ConfigManager.FIREBASE_TARGET_FIRESTORE) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                ) {
+                                    Text("Firestore", fontSize = 11.sp, maxLines = 1)
+                                }
+                                Button(
+                                    onClick = { formFirebaseDbTarget.value = ConfigManager.FIREBASE_TARGET_BOTH },
+                                    modifier = Modifier.weight(1f).testTag("firebase_target_both_btn"),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (formFirebaseDbTarget.value == ConfigManager.FIREBASE_TARGET_BOTH) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                        contentColor = if (formFirebaseDbTarget.value == ConfigManager.FIREBASE_TARGET_BOTH) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                ) {
+                                    Text("Ambos", fontSize = 11.sp, maxLines = 1)
+                                }
+                            }
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                            Text("Autenticação Admin Firebase (Opcional)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(
+                                "Caso suas Security Rules exijam autenticação de administrador, preencha o email e senha cadastrados no Firebase Auth:",
+                                fontSize = 11.sp,
+                                color = Color.Gray
+                            )
+
+                            OutlinedTextField(
+                                value = formFirebaseAuthEmail.value,
+                                onValueChange = { formFirebaseAuthEmail.value = it },
+                                label = { Text("Email de Administrador Firebase") },
+                                placeholder = { Text("admin@exemplo.com (ou vazio para anônimo)") },
+                                modifier = Modifier.fillMaxWidth().testTag("firebase_email_input"),
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                            )
+
+                            OutlinedTextField(
+                                value = formFirebaseAuthPassword.value,
+                                onValueChange = { formFirebaseAuthPassword.value = it },
+                                label = { Text("Senha do Administrador Firebase") },
+                                modifier = Modifier.fillMaxWidth().testTag("firebase_password_input"),
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Button(
+                                    onClick = {
+                                        isTestingAuth = true
+                                        authStatusMsg = null
+                                        viewModel.testFirebaseAuth(formFirebaseAuthEmail.value, formFirebaseAuthPassword.value) { success, msg ->
+                                            isTestingAuth = false
+                                            authStatusMsg = msg
+                                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                        }
+                                    },
+                                    enabled = !isTestingAuth,
+                                    modifier = Modifier.weight(1f).testTag("test_firebase_auth_btn")
+                                ) {
+                                    if (isTestingAuth) {
+                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                    }
+                                    Text("Testar / Conectar", fontSize = 12.sp)
+                                }
+
+                                OutlinedButton(
+                                    onClick = { showRulesDialog = true },
+                                    modifier = Modifier.weight(1f).testTag("show_rules_btn")
+                                ) {
+                                    Icon(Icons.Filled.Code, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Regras / Ajuda", fontSize = 12.sp)
+                                }
+                            }
+
+                            if (authStatusMsg != null) {
+                                Text(
+                                    text = authStatusMsg ?: "",
+                                    fontSize = 11.sp,
+                                    color = if (authStatusMsg?.startsWith("Autenticado com sucesso") == true || authStatusMsg?.startsWith("Autenticado como") == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                         }
+                    }
+
+                    if (showRulesDialog) {
+                        val rtdbRulesCode = "{\n  \"rules\": {\n    \"dados\": {\n      \".read\": \"auth != null\",\n      \".write\": \"auth != null\",\n      \"indices\": {\n        \".read\": true,\n        \".write\": \"auth != null\"\n      },\n      \"licencas\": {\n        \".read\": true,\n        \".write\": \"auth != null\"\n      }\n    }\n  }\n}"
+                        val firestoreRulesCode = "rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if request.auth != null;\n    }\n    match /dados_licencas/{docId} {\n      allow read: if true;\n      allow write: if request.auth != null;\n    }\n    match /dados_indices/licenca {\n      allow read: if true;\n      allow write: if request.auth != null;\n    }\n  }\n}"
+
+                        AlertDialog(
+                            onDismissRequest = { showRulesDialog = false },
+                            title = { Text("Configuração de Segurança Firebase", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+                            text = {
+                                Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Para resolver o erro 'Permission Denied', siga estes 3 passos no console.firebase.com:", fontSize = 12.sp)
+                                    
+                                    Text("1. Ativar Autenticação Anônima:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                                    Text("Acesse Authentication > Sign-in method > Ative 'Anônimo' (e 'E-mail/senha' se desejar conta admin).", fontSize = 11.sp)
+
+                                    HorizontalDivider()
+
+                                    Text("2. Regras Realtime Database:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                                    Text("Acesse Realtime Database > Regras e cole:", fontSize = 11.sp)
+                                    Button(
+                                        onClick = {
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            clipboard.setPrimaryClip(ClipData.newPlainText("RTDB Rules", rtdbRulesCode))
+                                            Toast.makeText(context, "Regras do RTDB copiadas para a área de transferência!", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Copiar Regras RTDB", fontSize = 12.sp)
+                                    }
+
+                                    HorizontalDivider()
+
+                                    Text("3. Regras Cloud Firestore:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                                    Text("Acesse Firestore Database > Regras e cole:", fontSize = 11.sp)
+                                    Button(
+                                        onClick = {
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            clipboard.setPrimaryClip(ClipData.newPlainText("Firestore Rules", firestoreRulesCode))
+                                            Toast.makeText(context, "Regras do Firestore copiadas para a área de transferência!", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Copiar Regras Firestore", fontSize = 12.sp)
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = { showRulesDialog = false }) {
+                                    Text("Fechar")
+                                }
+                            }
+                        )
                     }
                 } else {
                     OutlinedTextField(
@@ -2909,7 +3107,10 @@ fun SettingsScreen(viewModel: SmsGatewayViewModel) {
                     discountEnabledVal = formDiscountEnabled.value,
                     discountTextVal = formDiscountText.value,
                     discountPercentVal = valDiscountPercent,
-                    settingsPasswordVal = formSettingsPassword.value
+                    settingsPasswordVal = formSettingsPassword.value,
+                    firebaseAuthEmailVal = formFirebaseAuthEmail.value,
+                    firebaseAuthPasswordVal = formFirebaseAuthPassword.value,
+                    firebaseDbTargetVal = formFirebaseDbTarget.value
                 )
                 Toast.makeText(context, "Configurações guardadas e aplicadas!", Toast.LENGTH_SHORT).show()
             },
@@ -4377,6 +4578,7 @@ fun AdminTemplateEditorCard(viewModel: SmsGatewayViewModel) {
                                     value = senha.value,
                                     onValueChange = { senha.value = it; rawJsonText.value = buildJsonFromState() },
                                     label = { Text("SENHA") },
+                                    textStyle = TextStyle(fontWeight = FontWeight.Bold),
                                     modifier = Modifier.weight(1f),
                                     singleLine = true
                                 )

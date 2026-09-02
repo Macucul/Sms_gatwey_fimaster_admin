@@ -11,10 +11,10 @@ object SecurityUtils {
     private const val PBKDF2_KEY_LENGTH = 256
 
     /**
-     * Generates a secure, random alphanumeric password with special characters.
+     * Generates a random 6-character alphanumeric password containing only uppercase letters and numbers.
      */
-    fun generateRandomPassword(length: Int = 12): String {
-        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#%^&*"
+    fun generateRandomPassword(length: Int = 6): String {
+        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
         val random = SecureRandom()
         return (1..length)
             .map { chars[random.nextInt(chars.length)] }

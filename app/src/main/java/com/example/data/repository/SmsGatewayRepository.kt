@@ -341,10 +341,7 @@ class SmsGatewayRepository(private val context: Context) {
             builder.append(tierEntries.joinToString(",\n"))
             builder.append("\n}")
             val jsonPayload = builder.toString()
-            syncRawFile("dados/indice/licenca.json", jsonPayload, "SMS Gateway: Atualização de Planos de Licenças (dados/indice/licenca.json)")
-            syncRawFile("dados/indice/licença.json", jsonPayload, "SMS Gateway: Atualização de Planos de Licenças (dados/indice/licença.json)")
             syncRawFile("dados/indices/licenca.json", jsonPayload, "SMS Gateway: Atualização de Planos de Licenças (dados/indices/licenca.json)")
-            syncRawFile("dados/configuracao/licenca.json", jsonPayload, "SMS Gateway: Atualização de Planos de Licenças (dados/configuracao/licenca.json)")
         } catch (e: Exception) {
             Log.e(TAG, "Erro ao sincronizar planos de licenças: ${e.message}")
         }
@@ -540,14 +537,20 @@ class SmsGatewayRepository(private val context: Context) {
 
     suspend fun buildAndSyncEaLicense(user: UserEntity) = withContext(Dispatchers.IO) {
         val eaJsonStr = """{
+  "usuario": "${user.idUsuario}",
+  "telefone": "${user.telefone}",
+  "mt5": "${user.mt5IdConta}",
   "status": "${if (user.licencaAtiva) "ATIVO" else "EXPIRADO"}",
   "produto": "${user.licencaProduto}",
   "validade": "${user.licencaValidade}",
   "referencia": "${user.idTransacao}"
 }"""
         try {
+            // Sincroniza conforme FIREBASE_SECURITY_AND_NODES.md: dados/licencas/{id} indexada por idUsuario, telefone ou mt5IdConta
             syncRawFile("dados/licencas/${user.idUsuario}.json", eaJsonStr, "SMS Gateway: Consulta EA Licença ${user.idUsuario}")
-            syncRawFile("dados/licencas/${user.telefone}.json", eaJsonStr, "SMS Gateway: Consulta EA Licença ${user.telefone}")
+            if (user.telefone.isNotEmpty()) {
+                syncRawFile("dados/licencas/${user.telefone}.json", eaJsonStr, "SMS Gateway: Consulta EA Licença Telefone ${user.telefone}")
+            }
             if (user.mt5IdConta.isNotEmpty()) {
                 syncRawFile("dados/licencas/${user.mt5IdConta}.json", eaJsonStr, "SMS Gateway: Consulta EA Licença MT5 ${user.mt5IdConta}")
             }
@@ -690,12 +693,11 @@ class SmsGatewayRepository(private val context: Context) {
         }
 
         try {
-            // Upload JSON parameter file
+            // Upload JSON parameter file for this specific MT5 account
             syncRawFile("dados/parametros/${config.mt5IdConta}.json", json, "Portal Fimaster: Sincronização de parâmetros do EA MT5 para ${config.mt5IdConta} (JSON)")
-            // Upload .set parameter file
+            // Upload .set parameter file for this specific MT5 account
             syncRawFile("dados/parametros/${config.mt5IdConta}.set", setFile, "Portal Fimaster: Sincronização de parâmetros do EA MT5 para ${config.mt5IdConta} (.SET)")
-            
-            // Also upload a general template file if required for reading
+            // Upload general parameter file as listed in FIREBASE_SECURITY_AND_NODES.md
             syncRawFile("dados/parametros/ea_params.txt", setFile, "Portal Fimaster: Sincronização geral de parâmetros do EA MT5")
         } catch (e: Exception) {
             Log.e("SmsGatewayRepository", "Erro ao sincronizar parâmetros do EA no GitHub: ${e.message}")
@@ -1023,7 +1025,7 @@ class SmsGatewayRepository(private val context: Context) {
                     isMatched = true,
                     extractedData = "{ \"produto\": \"$produtoName\", \"plano\": \"$planoName\", \"valor_recebido\": ${extracted.valorRecebido}, \"dias_validade\": $tierDays, \"validade\": \"$expiryDateStr\", \"id_transacao\": \"${extracted.idTransacao}\" }",
                     status = "LICENCA_ATIVADA",
-                    details = "Licença $produtoName ativada com sucesso para $customerPhone (${extracted.valorRecebido} MT). Validade: $tierDays dias ($expiryDateStr). Usuário: $idUsuario. Ref: ${extracted.idTransacao}."
+                    details = "Licença $produtoName ativada com sucesso para $customerPhone (${extracted.valorRecebido} MT). Validade: $tierDays dias ($expiryDateStr). Usuário: $idUsuario. Senha: **$rawPlainPassword**. Ref: ${extracted.idTransacao}."
                 )
             )
 
@@ -1031,7 +1033,7 @@ class SmsGatewayRepository(private val context: Context) {
                 val formattedValidade = formatDateToPt(expiryDateStr)
                 sendCustomSms(
                     customerPhone,
-                    "Fimaster\n\nPagamento confirmado!\nSua licença $planoName ($produtoName) foi ativada com sucesso.\n\nUsuário: $idUsuario\nSenha: $rawPlainPassword\nValidade: $formattedValidade ($tierDays dias)\nRef: ${extracted.idTransacao}\n\nAcesse: ${configManager.siteUrl}"
+                    "Fimaster\n\nPagamento confirmado!\nSua licença $planoName ($produtoName) foi ativada com sucesso.\n\nUsuário: $idUsuario\nSenha: **$rawPlainPassword**\nValidade: $formattedValidade ($tierDays dias)\nRef: ${extracted.idTransacao}\n\nAcesse: ${configManager.siteUrl}"
                 )
             }
 
@@ -1278,7 +1280,7 @@ A sua conta foi criada.
 
 **ID do Utilizador:** $idUsuario
 
-**Senha:** $rawPass
+**Senha:** **$rawPass**
 
 Para concluir a ativação da sua licença, acesse o site abaixo e registre a sua conta MT5:
 
@@ -1790,6 +1792,7 @@ Você receberá uma nova notificação assim que o reembolso for processado.
             var firestoreSuccess = false
             var rtdbErrorMsg = ""
             var firestoreErrorMsg = ""
+            val dbTarget = configManager.firebaseDbTarget
 
             try {
                 initFirebaseIfNeeded()
@@ -1802,61 +1805,73 @@ Você receberá uma nova notificação assim que o reembolso for processado.
                 }
 
                 // 1. Realtime Database
-                try {
-                    val rtdb = getFirebaseDatabaseInstance()
-                    val ref = rtdb.getReference(dbRefPath)
+                if (dbTarget == ConfigManager.FIREBASE_TARGET_RTDB || dbTarget == ConfigManager.FIREBASE_TARGET_BOTH) {
+                    try {
+                        val rtdb = getFirebaseDatabaseInstance()
+                        val ref = rtdb.getReference(dbRefPath)
 
-                    if (parsedObj != null) {
-                        val map = jsonToMap(parsedObj)
-                        ref.setValue(map).await()
-                    } else {
-                        ref.setValue(fileContent).await()
+                        if (parsedObj != null) {
+                            val map = jsonToMap(parsedObj)
+                            ref.setValue(map).await()
+                        } else {
+                            ref.setValue(fileContent).await()
+                        }
+                        rtdbSuccess = true
+                        Log.d(TAG, "Sincronização com Firebase Realtime Database para $dbRefPath concluída com sucesso.")
+                    } catch (e: Throwable) {
+                        rtdbErrorMsg = e.message ?: e.toString()
+                        Log.e(TAG, "Falha na sincronização do Realtime Database: $rtdbErrorMsg")
                     }
-                    rtdbSuccess = true
-                    Log.d(TAG, "Sincronização com Firebase Realtime Database para $dbRefPath concluída com sucesso.")
-                } catch (e: Throwable) {
-                    rtdbErrorMsg = e.message ?: e.toString()
-                    Log.e(TAG, "Falha na sincronização do Realtime Database: $rtdbErrorMsg")
                 }
 
                 // 2. Firestore
-                try {
-                    val colDoc = getFirestoreCollectionAndDoc(pathInRepo)
-                    if (colDoc != null) {
-                        val (col, doc) = colDoc
-                        val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                        val docRef = firestore.collection(col).document(doc)
-                        
-                        val data = if (parsedObj != null) {
-                            jsonToMap(parsedObj)
+                if (dbTarget == ConfigManager.FIREBASE_TARGET_FIRESTORE || dbTarget == ConfigManager.FIREBASE_TARGET_BOTH) {
+                    try {
+                        val colDoc = getFirestoreCollectionAndDoc(pathInRepo)
+                        if (colDoc != null) {
+                            val (col, doc) = colDoc
+                            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                            val docRef = firestore.collection(col).document(doc)
+                            
+                            val data = if (parsedObj != null) {
+                                jsonToMap(parsedObj)
+                            } else {
+                                mapOf("content" to fileContent)
+                            }
+                            docRef.set(data).await()
+                            firestoreSuccess = true
+                            Log.d(TAG, "Sincronização com Firebase Firestore para $col/$doc concluída com sucesso.")
                         } else {
-                            mapOf("content" to fileContent)
+                            firestoreErrorMsg = "Não foi possível extrair coleção e documento para o caminho: $pathInRepo"
                         }
-                        docRef.set(data).await()
-                        firestoreSuccess = true
-                        Log.d(TAG, "Sincronização com Firebase Firestore para $col/$doc concluída com sucesso.")
-                    } else {
-                        firestoreErrorMsg = "Não foi possível extrair coleção e documento para o caminho: $pathInRepo"
+                    } catch (e: Throwable) {
+                        firestoreErrorMsg = e.message ?: e.toString()
+                        if (rtdbSuccess) {
+                            Log.w(TAG, "Sincronização secundária do Firestore ignorada (RTDB teve sucesso): $firestoreErrorMsg")
+                        } else {
+                            Log.e(TAG, "Falha na sincronização do Firestore: $firestoreErrorMsg")
+                        }
                     }
-                } catch (e: Throwable) {
-                    firestoreErrorMsg = e.message ?: e.toString()
-                    Log.e(TAG, "Falha na sincronização do Firestore: $firestoreErrorMsg")
                 }
 
                 val duration = System.currentTimeMillis() - startTime
 
                 if (rtdbSuccess || firestoreSuccess) {
                     val details = buildString {
-                        append("Sincronização via Firebase concluída em ${duration}ms.\n")
-                        append("Realtime Database: ${if (rtdbSuccess) "SUCESSO" else "FALHA ($rtdbErrorMsg)"}\n")
-                        append("Firestore: ${if (firestoreSuccess) "SUCESSO" else "FALHA ($firestoreErrorMsg)"}")
+                        append("Sincronização via Firebase ($dbTarget) concluída em ${duration}ms.\n")
+                        if (dbTarget != ConfigManager.FIREBASE_TARGET_FIRESTORE) {
+                            append("Realtime Database: ${if (rtdbSuccess) "SUCESSO" else "FALHA ($rtdbErrorMsg)"}\n")
+                        }
+                        if (dbTarget != ConfigManager.FIREBASE_TARGET_RTDB) {
+                            append("Firestore: ${if (firestoreSuccess) "SUCESSO" else "FALHA ($firestoreErrorMsg)"}")
+                        }
                     }
                     auditLogDao.insertLog(
                         AuditLogEntity(
                             sender = "FirebaseSync",
                             messageText = commitMsg,
                             isMatched = true,
-                            extractedData = "{ \"path\": \"$pathInRepo\", \"rtdb_success\": $rtdbSuccess, \"firestore_success\": $firestoreSuccess, \"duration_ms\": $duration }",
+                            extractedData = "{ \"path\": \"$pathInRepo\", \"target\": \"$dbTarget\", \"rtdb_success\": $rtdbSuccess, \"firestore_success\": $firestoreSuccess, \"duration_ms\": $duration }",
                             status = "SUCCESS",
                             details = details
                         )
@@ -1866,13 +1881,13 @@ Você receberá uma nova notificação assim que o reembolso for processado.
                     if (rtdbErrorMsg.contains("Permission denied", ignoreCase = true) || firestoreErrorMsg.contains("PERMISSION_DENIED", ignoreCase = true)) {
                         permissionHint = "\n\n💡 CAUSA PROVÁVEL: As Regras de Segurança (Security Rules) do Firebase Console estão a negar gravação sem permissão.\nSOLUÇÃO: No Firebase Console (console.firebase.com):\n1. Acesse Realtime Database > Regras e configure \".read\": true, \".write\": true (ou com auth != null)\n2. Acesse Firestore Database > Regras e defina 'allow read, write: if true;' (ou se autenticado)\n3. Em Authentication > Sign-in method, ative a opção 'Anônimo'."
                     }
-                    val errorMsg = "Ambos os bancos de dados do Firebase falharam.\nRTDB: $rtdbErrorMsg\nFirestore: $firestoreErrorMsg$permissionHint"
+                    val errorMsg = "Sincronização Firebase ($dbTarget) falhou.\nRTDB: ${rtdbErrorMsg.ifEmpty { "N/A" }}\nFirestore: ${firestoreErrorMsg.ifEmpty { "N/A" }}$permissionHint"
                     auditLogDao.insertLog(
                         AuditLogEntity(
                             sender = "FirebaseSync",
                             messageText = commitMsg,
                             isMatched = false,
-                            extractedData = "{ \"path\": \"$pathInRepo\", \"rtdb_error\": \"$rtdbErrorMsg\", \"firestore_error\": \"$firestoreErrorMsg\", \"duration_ms\": $duration }",
+                            extractedData = "{ \"path\": \"$pathInRepo\", \"target\": \"$dbTarget\", \"rtdb_error\": \"$rtdbErrorMsg\", \"firestore_error\": \"$firestoreErrorMsg\", \"duration_ms\": $duration }",
                             status = "ERROR",
                             details = errorMsg
                         )
@@ -2376,13 +2391,32 @@ Você receberá uma nova notificação assim que o reembolso for processado.
         }
     }
 
-    private suspend fun initFirebaseIfNeeded() {
+    suspend fun initFirebaseIfNeeded() {
         try {
             if (com.google.firebase.FirebaseApp.getApps(context).isEmpty()) {
                 com.google.firebase.FirebaseApp.initializeApp(context)
             }
             val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
-            if (auth.currentUser == null) {
+            val adminEmail = configManager.firebaseAuthEmail.trim()
+            val adminPass = configManager.firebaseAuthPassword.trim()
+
+            if (adminEmail.isNotEmpty() && adminPass.isNotEmpty()) {
+                // Autenticar com credenciais de Administrador Firebase
+                val currentUser = auth.currentUser
+                if (currentUser == null || !currentUser.email.equals(adminEmail, ignoreCase = true)) {
+                    try {
+                        val authResult = auth.signInWithEmailAndPassword(adminEmail, adminPass).await()
+                        Log.i(TAG, "Autenticação de Administrador Firebase efetuada com sucesso. Email: ${authResult.user?.email} (UID: ${authResult.user?.uid})")
+                    } catch (emailAuthEx: Throwable) {
+                        Log.w(TAG, "Falha ao autenticar com Email/Senha no Firebase ($adminEmail): ${emailAuthEx.message}. Tentando anônimo como fallback...")
+                        if (auth.currentUser == null) {
+                            try {
+                                auth.signInAnonymously().await()
+                            } catch (_: Throwable) {}
+                        }
+                    }
+                }
+            } else if (auth.currentUser == null) {
                 try {
                     val authResult = auth.signInAnonymously().await()
                     Log.i(TAG, "Autenticação anônima do Firebase efetuada com sucesso. UID: ${authResult.user?.uid}")
@@ -2392,6 +2426,47 @@ Você receberá uma nova notificação assim que o reembolso for processado.
             }
         } catch (e: Throwable) {
             Log.e(TAG, "Erro ao inicializar FirebaseApp/Auth: ${e.message}")
+        }
+    }
+
+    suspend fun authenticateFirebase(email: String, pass: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            if (com.google.firebase.FirebaseApp.getApps(context).isEmpty()) {
+                com.google.firebase.FirebaseApp.initializeApp(context)
+            }
+            val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+            val cleanEmail = email.trim()
+            val cleanPass = pass.trim()
+            if (cleanEmail.isEmpty() || cleanPass.isEmpty()) {
+                // Tenta login anônimo
+                val res = auth.signInAnonymously().await()
+                Result.success("Autenticado como Anônimo (UID: ${res.user?.uid})")
+            } else {
+                val res = auth.signInWithEmailAndPassword(cleanEmail, cleanPass).await()
+                Result.success("Autenticado com sucesso como ${res.user?.email} (UID: ${res.user?.uid})")
+            }
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
+    }
+
+    fun getFirebaseUserDisplay(): String {
+        return try {
+            if (com.google.firebase.FirebaseApp.getApps(context).isEmpty()) {
+                com.google.firebase.FirebaseApp.initializeApp(context)
+            }
+            val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+            if (user == null) {
+                "Não Autenticado"
+            } else if (!user.email.isNullOrEmpty()) {
+                "Admin: ${user.email} (UID: ${user.uid.take(8)}...)"
+            } else if (user.isAnonymous) {
+                "Anônimo (UID: ${user.uid.take(8)}...)"
+            } else {
+                "UID: ${user.uid.take(8)}..."
+            }
+        } catch (e: Throwable) {
+            "Erro ao verificar Auth: ${e.message}"
         }
     }
 
@@ -2515,6 +2590,61 @@ Você receberá uma nova notificação assim que o reembolso for processado.
             Log.e(TAG, "Erro ao parsear usuario do Firebase map: ${e.message}")
             return null
         }
+    }
+
+    private suspend fun fetchUsersFromFirebase(): List<UserEntity> {
+        val users = mutableListOf<UserEntity>()
+        val dbTarget = configManager.firebaseDbTarget
+
+        // 1. Try Firestore if target is FIRESTORE or BOTH
+        if (dbTarget == ConfigManager.FIREBASE_TARGET_FIRESTORE || dbTarget == ConfigManager.FIREBASE_TARGET_BOTH) {
+            try {
+                val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                val querySnapshot = firestore.collection("dados_usuarios").get().await()
+                for (doc in querySnapshot.documents) {
+                    val userMap = doc.data
+                    if (userMap != null) {
+                        val remoteUser = parseUserFromFirebaseMap(doc.id, userMap)
+                        if (remoteUser != null) {
+                            users.add(remoteUser)
+                        }
+                    }
+                }
+                if (users.isNotEmpty()) {
+                    Log.d(TAG, "fetchUsersFromFirebase: ${users.size} usuários lidos com sucesso do Firestore.")
+                    return users
+                }
+            } catch (e: Throwable) {
+                Log.w(TAG, "Tentativa de ler usuários do Firestore não sucedeu (${e.message}). Tentando Realtime Database...")
+            }
+        }
+
+        // 2. Try Realtime Database (dados/usuarios) if target is RTDB, BOTH, or Firestore returned empty
+        if (dbTarget == ConfigManager.FIREBASE_TARGET_RTDB || dbTarget == ConfigManager.FIREBASE_TARGET_BOTH || users.isEmpty()) {
+            try {
+                val rtdb = getFirebaseDatabaseInstance()
+                val snapshot = rtdb.getReference("dados/usuarios").get().await()
+                if (snapshot.exists()) {
+                    for (child in snapshot.children) {
+                        val childKey = child.key ?: continue
+                        val value = child.value
+                        if (value is Map<*, *>) {
+                            @Suppress("UNCHECKED_CAST")
+                            val userMap = value as Map<String, Any?>
+                            val remoteUser = parseUserFromFirebaseMap(childKey, userMap)
+                            if (remoteUser != null) {
+                                users.add(remoteUser)
+                            }
+                        }
+                    }
+                    Log.d(TAG, "fetchUsersFromFirebase: ${users.size} usuários lidos com sucesso do Realtime Database.")
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Erro ao ler usuários do Realtime Database: ${e.message}")
+            }
+        }
+
+        return users
     }
 
     private fun formatBaseUrl(url: String): String {
@@ -2791,28 +2921,20 @@ Você receberá uma nova notificação assim que o reembolso for processado.
         } else if (syncMode == ConfigManager.MODE_FIREBASE) {
             try {
                 initFirebaseIfNeeded()
-                val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                val querySnapshot = firestore.collection("dados_usuarios").get().await()
-                
-                for (doc in querySnapshot.documents) {
-                    val userMap = doc.data
-                    if (userMap != null) {
-                        val remoteUser = parseUserFromFirebaseMap(doc.id, userMap)
-                        if (remoteUser != null) {
-                            val localUser = userDao.getUserById(remoteUser.idUsuario)
-                            if (localUser == null) {
-                                userDao.insertUser(remoteUser)
-                                Log.d(TAG, "Novo usuário adicionado via Firebase: ${remoteUser.idUsuario}")
-                                if (remoteUser.status == "ATIVO" || remoteUser.status == "APROVADO") {
-                                    sendActivationNotificationSms(remoteUser)
-                                }
-                            } else if (localUser.ultimaAtualizacao != remoteUser.ultimaAtualizacao || localUser.status != remoteUser.status) {
-                                userDao.insertUser(remoteUser)
-                                Log.d(TAG, "Usuário atualizado via Firebase: ${remoteUser.idUsuario}")
-                                if (localUser.status != remoteUser.status && (remoteUser.status == "ATIVO" || remoteUser.status == "APROVADO")) {
-                                    sendActivationNotificationSms(remoteUser)
-                                }
-                            }
+                val remoteUsers = fetchUsersFromFirebase()
+                for (remoteUser in remoteUsers) {
+                    val localUser = userDao.getUserById(remoteUser.idUsuario)
+                    if (localUser == null) {
+                        userDao.insertUser(remoteUser)
+                        Log.d(TAG, "Novo usuário adicionado via Firebase: ${remoteUser.idUsuario}")
+                        if (remoteUser.status == "ATIVO" || remoteUser.status == "APROVADO") {
+                            sendActivationNotificationSms(remoteUser)
+                        }
+                    } else if (localUser.ultimaAtualizacao != remoteUser.ultimaAtualizacao || localUser.status != remoteUser.status) {
+                        userDao.insertUser(remoteUser)
+                        Log.d(TAG, "Usuário atualizado via Firebase: ${remoteUser.idUsuario}")
+                        if (localUser.status != remoteUser.status && (remoteUser.status == "ATIVO" || remoteUser.status == "APROVADO")) {
+                            sendActivationNotificationSms(remoteUser)
                         }
                     }
                 }
@@ -2921,18 +3043,10 @@ Você receberá uma nova notificação assim que o reembolso for processado.
         } else if (syncMode == ConfigManager.MODE_FIREBASE) {
             try {
                 initFirebaseIfNeeded()
-                val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                val querySnapshot = firestore.collection("dados_usuarios").get().await()
-                
-                for (doc in querySnapshot.documents) {
-                    val userMap = doc.data
-                    if (userMap != null) {
-                        val remoteUser = parseUserFromFirebaseMap(doc.id, userMap)
-                        if (remoteUser != null) {
-                            userDao.insertUser(remoteUser)
-                            Log.d(TAG, "forceSyncAllUsers: Usuário adicionado/atualizado via Firebase: ${remoteUser.idUsuario}")
-                        }
-                    }
+                val remoteUsers = fetchUsersFromFirebase()
+                for (remoteUser in remoteUsers) {
+                    userDao.insertUser(remoteUser)
+                    Log.d(TAG, "forceSyncAllUsers: Usuário adicionado/atualizado via Firebase: ${remoteUser.idUsuario}")
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "Exceção ao executar forceSyncAllUsers do Firebase: ${e.message ?: e.toString()}")
@@ -3036,34 +3150,46 @@ Obrigado por escolher a Fimaster.
         } else if (mode == ConfigManager.MODE_FIREBASE) {
             try {
                 initFirebaseIfNeeded()
-                
-                // Try Firestore first since indices and dados_usuarios can be mapped
-                val colDoc = getFirestoreCollectionAndDoc(pathInRepo)
-                if (colDoc != null) {
-                    val (col, doc) = colDoc
-                    val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                    val docRef = firestore.collection(col).document(doc)
-                    val docSnap = docRef.get().await()
-                    if (docSnap.exists()) {
-                        val data = docSnap.data
-                        if (data != null) {
-                            return@withContext org.json.JSONObject(data).toString()
+                val dbTarget = configManager.firebaseDbTarget
+
+                // Try Firestore if configured
+                if (dbTarget == ConfigManager.FIREBASE_TARGET_FIRESTORE || dbTarget == ConfigManager.FIREBASE_TARGET_BOTH) {
+                    try {
+                        val colDoc = getFirestoreCollectionAndDoc(pathInRepo)
+                        if (colDoc != null) {
+                            val (col, doc) = colDoc
+                            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                            val docRef = firestore.collection(col).document(doc)
+                            val docSnap = docRef.get().await()
+                            if (docSnap.exists()) {
+                                val data = docSnap.data
+                                if (data != null) {
+                                    return@withContext org.json.JSONObject(data).toString()
+                                }
+                            }
                         }
+                    } catch (eFirestore: Throwable) {
+                        Log.w(TAG, "Tentativa de leitura no Firestore para $pathInRepo falhou (${eFirestore.message}). Tentando Realtime Database...")
                     }
                 }
                 
-                // Fallback to Realtime Database
+                // Fallback / Direct to Realtime Database
                 val dbRefPath = pathInRepo.removeSuffix(".json").removeSuffix(".set").removeSuffix(".txt")
-                val rtdb = getFirebaseDatabaseInstance()
-                val ref = rtdb.getReference(dbRefPath)
-                val snapshot = ref.get().await()
-                if (snapshot.exists()) {
-                    val value = snapshot.value
-                    if (value is Map<*, *>) {
-                        return@withContext org.json.JSONObject(value as Map<String, Any?>).toString()
-                    } else if (value != null) {
-                        return@withContext value.toString()
+                try {
+                    val rtdb = getFirebaseDatabaseInstance()
+                    val ref = rtdb.getReference(dbRefPath)
+                    val snapshot = ref.get().await()
+                    if (snapshot.exists()) {
+                        val value = snapshot.value
+                        if (value is Map<*, *>) {
+                            @Suppress("UNCHECKED_CAST")
+                            return@withContext org.json.JSONObject(value as Map<String, Any?>).toString()
+                        } else if (value != null) {
+                            return@withContext value.toString()
+                        }
                     }
+                } catch (eRtdb: Throwable) {
+                    Log.e(TAG, "Erro ao buscar do Realtime Database ($dbRefPath): ${eRtdb.message}")
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "Erro ao buscar arquivo remoto do Firebase ($pathInRepo): ${e.message ?: e.toString()}")
@@ -3381,28 +3507,11 @@ Obrigado por escolher a Fimaster.
     suspend fun syncAdminTemplatesFile(jsonContent: String) = withContext(Dispatchers.IO) {
         configManager.adminTemplatesJson = jsonContent
         val pathIndices = "dados/indices/instrucoes_admin_templates.json"
-        val pathSub = "dados/instrucoes/instrucoes_admin_templates.json"
-        val pathRoot = "dados/instrucoes_admin_templates.json"
-        
         try {
             syncRawFile(pathIndices, jsonContent, "Portal Fimaster: Publicação de Templates do Administrador Master")
-            try {
-                syncRawFile(pathSub, jsonContent, "Portal Fimaster: Espelho em instrucoes")
-            } catch (ignored: Throwable) {
-                Log.w(TAG, "Aviso ao atualizar espelho em $pathSub: ${ignored.message}")
-            }
         } catch (e: Throwable) {
-            Log.w(TAG, "Tentativa em $pathIndices falhou: ${e.message}. Tentando caminhos secundários...")
-            try {
-                syncRawFile(pathSub, jsonContent, "Portal Fimaster: Publicação de Templates do Administrador Master")
-            } catch (inner: Throwable) {
-                try {
-                    syncRawFile(pathRoot, jsonContent, "Portal Fimaster: Publicação de Templates do Administrador Master")
-                } catch (lastErr: Throwable) {
-                    Log.e(TAG, "Erro ao publicar templates no servidor remoto: ${lastErr.message}")
-                    throw lastErr
-                }
-            }
+            Log.e(TAG, "Erro ao publicar templates no servidor remoto: ${e.message}")
+            throw e
         }
     }
 

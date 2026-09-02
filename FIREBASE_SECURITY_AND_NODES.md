@@ -10,19 +10,19 @@ Este documento detalha todos os nós, caminhos e coleções acessados pelo aplic
 
 | Caminho no Repositório / RTDB | Coleção Firestore | Documento Firestore | Operação | Finalidade e Descrição |
 | :--- | :--- | :--- | :--- | :--- |
-| `dados/indice/licenca` | `dados_indice` | `licenca` | **Escrita / Leitura** | Planos e tabelas de preços de licenças (`starter`, `pro`, `master_vip`, `trial`), links de WhatsApp/Telegram, recursos e QR Codes de pagamento em binário/Base64. |
-| `dados/indices/mt5` | `dados_indices` | `mt5` | **Escrita / Leitura** | Índice rápido mapeando números de contas MT5 para IDs de usuários (`"999999": "USR-..."`). |
-| `dados/indices/telefones` | `dados_indices` | `telefones` | **Escrita / Leitura** | Índice rápido mapeando números de telefone para IDs de usuários (`"+25884...": "USR-..."`). |
-| `dados/indices/instrucoes_admin_templates` | `dados_indices` | `instrucoes_admin_templates` | **Escrita / Leitura** | Templates mestres de configuração do EA, instruções JSON e parâmetros operacionais. |
-| `dados/usuarios/{idUsuario}` | `dados_usuarios` | `{idUsuario}` | **Escrita / Leitura** | Cadastro completo de usuários, planos adquiridos, saldo, expiração, MT5 ID e status de ativação. |
-| `dados/licencas/{id}` | `dados_licencas` | `{id}` | **Escrita / Leitura** | Dados da licença compilada para consulta do Expert Advisor (EA MQL5), indexada por `idUsuario`, `telefone` ou `mt5IdConta`. |
-| `dados/parametros/{mt5IdConta}` | `dados_parametros` | `{mt5IdConta}` | **Escrita / Leitura** | Parâmetros de trading do robô MT5 em formato JSON e `.set` (lotes, stop loss, take profit, trailing, horários). |
-| `dados/parametros/ea_params` | `dados_parametros` | `ea_params` | **Escrita / Leitura** | Arquivo geral de parâmetros do EA (`ea_params.txt`). |
-| `dados/pendentes/{idPendente}` | `dados_pendentes` | `{idPendente}` | **Escrita / Leitura / Exclusão** | Fila de pagamentos pendentes recebidos por SMS (M-Pesa / E-Mola) aguardando vinculação de conta MT5. O item é excluído após a vinculação bem-sucedida. |
-| `dados/reembolsos/{idReembolso}` | `dados_reembolsos` | `{idReembolso}` | **Escrita / Leitura** | Registros de reembolsos e estornos operados no gateway. |
-| `dados/configuracao/config` | `dados_configuracao` | `config` | **Escrita / Leitura** | Configurações gerais do sistema SMS Gateway, chaves de API, webhooks e parâmetros globais. |
-| `dados/auditoria/audit_log` | `dados_auditoria` | `audit_log` | **Escrita / Leitura** | Histórico e auditoria de eventos, sincronizações, disparos de SMS e requisições remotas. |
-| `dados/versao` | `metadata` ou `dados_versao` | `versao` | **Escrita / Leitura** | Controle de versão de dados e status do sincronizador. |
+| `dados/indices/licenca` | **Escrita / Leitura** | Planos e tabelas de preços de licenças (`starter`, `pro`, `master_vip`, `trial`), links de WhatsApp/Telegram, recursos e QR Codes de pagamento em binário/Base64. |
+| `dados/indices/mt5` | **Escrita / Leitura** | Índice rápido mapeando números de contas MT5 para IDs de usuários (`"999999": "USR-..."`). |
+| `dados/indices/telefones` | **Escrita / Leitura** | Índice rápido mapeando números de telefone para IDs de usuários (`"+25884...": "USR-..."`). |
+| `dados/indices/instrucoes_admin_templates` | **Escrita / Leitura** | Templates mestres de configuração do EA, instruções JSON e parâmetros operacionais. |
+| `dados/usuarios/{idUsuario}`  | **Escrita / Leitura** | Cadastro completo de usuários, planos adquiridos, saldo, expiração, MT5 ID e status de ativação. |
+| `dados/licencas/{id}` | **Escrita / Leitura** | Dados da licença compilada para consulta do Expert Advisor (EA MQL5), indexada por `idUsuario`, `telefone` ou `mt5IdConta`. |
+| `dados/parametros/{mt5IdConta}` | **Escrita / Leitura** | Parâmetros de trading do robô MT5 em formato JSON e `.set` (lotes, stop loss, take profit, trailing, horários). |
+| `dados/parametros/ea_params` | **Escrita / Leitura** | Arquivo geral de parâmetros do EA (`ea_params.txt`). |
+| `dados/pendentes/{idPendente}`| **Escrita / Leitura / Exclusão** | Fila de pagamentos pendentes recebidos por SMS (M-Pesa / E-Mola) aguardando vinculação de conta MT5. O item é excluído após a vinculação bem-sucedida. |
+| `dados/reembolsos/{idReembolso}`| **Escrita / Leitura** | Registros de reembolsos e estornos operados no gateway. |
+| `dados/configuracao/config`  | **Escrita / Leitura** | Configurações gerais do sistema SMS Gateway, chaves de API, webhooks e parâmetros globais. |
+| `dados/auditoria/audit_log` |  **Escrita / Leitura** | Histórico e auditoria de eventos, sincronizações, disparos de SMS e requisições remotas. |
+| `dados/versao`| **Escrita / Leitura** | Controle de versão de dados e status do sincronizador. |
 
 ---
 

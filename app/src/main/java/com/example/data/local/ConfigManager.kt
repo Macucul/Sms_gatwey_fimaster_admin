@@ -43,11 +43,18 @@ class ConfigManager(private val context: Context) {
         private const val KEY_DISCOUNT_TEXT = "discount_text"
         private const val KEY_DISCOUNT_PERCENT = "discount_percent"
         private const val KEY_SETTINGS_PASSWORD = "settings_password"
+        private const val KEY_FIREBASE_AUTH_EMAIL = "firebase_auth_email"
+        private const val KEY_FIREBASE_AUTH_PASSWORD = "firebase_auth_password"
+        private const val KEY_FIREBASE_DB_TARGET = "firebase_db_target"
         private const val KEY_ADMIN_TEMPLATES_JSON = "admin_templates_json"
 
         const val MODE_GITHUB = "GITHUB"
         const val MODE_FASTAPI = "FASTAPI"
         const val MODE_FIREBASE = "FIREBASE"
+
+        const val FIREBASE_TARGET_RTDB = "RTDB"
+        const val FIREBASE_TARGET_FIRESTORE = "FIRESTORE"
+        const val FIREBASE_TARGET_BOTH = "BOTH"
     }
 
     var smsBindingEnabled: Boolean
@@ -69,6 +76,18 @@ class ConfigManager(private val context: Context) {
     var settingsPassword: String
         get() = securePrefs.getString(KEY_SETTINGS_PASSWORD, "1234") ?: "1234"
         set(value) = securePrefs.edit().putString(KEY_SETTINGS_PASSWORD, value).apply()
+
+    var firebaseAuthEmail: String
+        get() = securePrefs.getString(KEY_FIREBASE_AUTH_EMAIL, "") ?: ""
+        set(value) = securePrefs.edit().putString(KEY_FIREBASE_AUTH_EMAIL, value.trim()).apply()
+
+    var firebaseAuthPassword: String
+        get() = securePrefs.getString(KEY_FIREBASE_AUTH_PASSWORD, "") ?: ""
+        set(value) = securePrefs.edit().putString(KEY_FIREBASE_AUTH_PASSWORD, value).apply()
+
+    var firebaseDbTarget: String
+        get() = prefs.getString(KEY_FIREBASE_DB_TARGET, FIREBASE_TARGET_RTDB) ?: FIREBASE_TARGET_RTDB
+        set(value) = prefs.edit().putString(KEY_FIREBASE_DB_TARGET, value).apply()
 
     var adminTemplatesJson: String
         get() = prefs.getString(KEY_ADMIN_TEMPLATES_JSON, "") ?: ""

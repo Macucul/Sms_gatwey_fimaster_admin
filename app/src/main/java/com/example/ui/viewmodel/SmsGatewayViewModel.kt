@@ -424,6 +424,28 @@ class SmsGatewayViewModel(application: Application) : AndroidViewModel(applicati
     private val _settingsPassword = MutableStateFlow(configManager.settingsPassword)
     val settingsPassword = _settingsPassword.asStateFlow()
 
+    private val _firebaseAuthEmail = MutableStateFlow(configManager.firebaseAuthEmail)
+    val firebaseAuthEmail = _firebaseAuthEmail.asStateFlow()
+
+    private val _firebaseAuthPassword = MutableStateFlow(configManager.firebaseAuthPassword)
+    val firebaseAuthPassword = _firebaseAuthPassword.asStateFlow()
+
+    private val _firebaseDbTarget = MutableStateFlow(configManager.firebaseDbTarget)
+    val firebaseDbTarget = _firebaseDbTarget.asStateFlow()
+
+    fun getFirebaseUserDisplay(): String = repo.getFirebaseUserDisplay()
+
+    fun testFirebaseAuth(email: String, pass: String, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val result = repo.authenticateFirebase(email, pass)
+            result.onSuccess { msg ->
+                onResult(true, msg)
+            }.onFailure { err ->
+                onResult(false, err.message ?: "Falha na autenticação")
+            }
+        }
+    }
+
     // Foreground service monitor state
     private val _isServiceActive = MutableStateFlow(GatewayService.isServiceRunning)
     val isServiceActive = _isServiceActive.asStateFlow()
@@ -529,7 +551,10 @@ class SmsGatewayViewModel(application: Application) : AndroidViewModel(applicati
         discountEnabledVal: Boolean = false,
         discountTextVal: String = "DESCONTO",
         discountPercentVal: Double = 10.0,
-        settingsPasswordVal: String = "1234"
+        settingsPasswordVal: String = "1234",
+        firebaseAuthEmailVal: String = "",
+        firebaseAuthPasswordVal: String = "",
+        firebaseDbTargetVal: String = ConfigManager.FIREBASE_TARGET_RTDB
     ) {
         configManager.saldoMinimo = mMinimo
         configManager.valorMinimoAtivacao = mMinimoAtivacao
@@ -554,6 +579,9 @@ class SmsGatewayViewModel(application: Application) : AndroidViewModel(applicati
         configManager.discountText = discountTextVal
         configManager.discountPercent = discountPercentVal
         configManager.settingsPassword = settingsPasswordVal
+        configManager.firebaseAuthEmail = firebaseAuthEmailVal
+        configManager.firebaseAuthPassword = firebaseAuthPasswordVal
+        configManager.firebaseDbTarget = firebaseDbTargetVal
 
         // Push values to live flows
         _saldoMinimo.value = mMinimo
@@ -579,6 +607,9 @@ class SmsGatewayViewModel(application: Application) : AndroidViewModel(applicati
         _discountText.value = discountTextVal
         _discountPercent.value = discountPercentVal
         _settingsPassword.value = settingsPasswordVal
+        _firebaseAuthEmail.value = firebaseAuthEmailVal
+        _firebaseAuthPassword.value = firebaseAuthPasswordVal
+        _firebaseDbTarget.value = firebaseDbTargetVal
         _dadosVersion.value = configManager.dadosVersion
         _ultimaAtualizacaoDados.value = configManager.ultimaAtualizacaoDados
 
