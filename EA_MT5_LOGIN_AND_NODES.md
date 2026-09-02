@@ -16,9 +16,9 @@ O login do robô EA no MetaTrader 5 é executado em 3 etapas sequenciais de segu
       │                           (Obtém o ID do Usuário vinculado: "USR-...")
       ▼
  2. Consulta Dados do Usuário ──► dados/usuarios/{idUsuario}.json
-      │                           (Obtém Salt, SenhaHash, Data de Validade e Status)
+      │                           (Obtém Salt, senha_hash, Data de Validade e Status)
       ▼
- 3. Validação Criptográfica ────► Hash SHA-256(Senha + Salt) == SenhaHash
+ 3. Validação Criptográfica ────► Hash SHA-256(Senha + Salt) == senha_hash
       │
       ├── [Se Válido e Não Expirado] ──► Login Aprovado ✅
       │                                   Carrega Licença & Parâmetros (Passo 4 e 5)
@@ -33,7 +33,7 @@ O login do robô EA no MetaTrader 5 é executado em 3 etapas sequenciais de segu
 | Ordem | Caminho / Nó no Banco | Coleção Firestore | Tipo de Acesso | Finalidade |
 | :---: | :--- | :--- | :---: | :--- |
 | **1º** | `dados/indices/mt5` (`mt5.json`) | `dados_indices/mt5` | **Leitura** | Mapeia o número da conta MT5 (Login) para o `idUsuario`. |
-| **2º** | `dados/usuarios/{idUsuario}` | `dados_usuarios/{idUsuario}` | **Leitura** | Validação de credenciais (Hash SHA-256 + Salt), data de expiração e status ativo. |
+| **2º** | `dados/usuarios/{idUsuario}` | `dados_usuarios/{idUsuario}` | **Leitura** | Validação de credenciais (Hash SHA-256 + salt), data de expiração e status ativo. |
 | **3º** | `dados/licencas/{mt5IdConta}` | `dados_licencas/{mt5IdConta}` | **Leitura** | Consulta direta da licença emitida para a conta MT5 específica. |
 | **4º** | `dados/parametros/{mt5IdConta}` | `dados_parametros/{mt5IdConta}` | **Leitura** | Descarrega as configurações operacionais do robô (JSON / `.set`). |
 | **5º** | `dados/indice/licenca` | `dados_indice/licenca` | **Leitura** | Regras e permissões do plano (templates, áudio, trailing stop, limites de contas). |
