@@ -2036,45 +2036,45 @@ Você receberá uma nova notificação assim que o reembolso for processado.
 
         val userJsonString = """
 {
-  "${user.idUsuario}": {
-    "senha_hash": "${user.senhaHash}",
+  "id_usuario": "${user.idUsuario}",
+  "senha_hash": "${user.senhaHash}",
+  "validade": "${user.licencaValidade}",
+  "numero": "${user.telefone}",
+  "nome": "${user.nome}",
+  "origem": "${user.origem}",
+  "status": "${user.status}",
+  "data_registro": "${user.dataRegistro}",
+  "ultima_atualizacao": "${user.ultimaAtualizacao}",
+  "id_transacao": "${user.idTransacao}",
+  "saldo": ${user.saldo},
+  "credito_guardado": ${user.creditoGuardado},
+  "salt": "${user.salt}",
+  "token_recuperacao": "${user.tokenRecuperacao}",
+  "nivel_autorizacao": "${user.nivelAutorizacao}",
+  "mt5": {
+    "registrado": ${user.mt5Registrado},
+    "id_conta": "${user.mt5IdConta}"
+  },
+  "licenca": {
+    "ativa": ${user.licencaAtiva},
+    "produto": "${user.licencaProduto}",
+    "plano": "${user.licencaPlano}",
     "validade": "${user.licencaValidade}",
-    "numero": "${user.telefone}",
-    "nome": "${user.nome}",
-    "origem": "${user.origem}",
-    "status": "${user.status}",
-    "data_registro": "${user.dataRegistro}",
-    "ultima_atualizacao": "${user.ultimaAtualizacao}",
-    "id_transacao": "${user.idTransacao}",
-    "saldo": ${user.saldo},
-    "salt": "${user.salt}",
-    "token_recuperacao": "${user.tokenRecuperacao}",
-    "nivel_autorizacao": "${user.nivelAutorizacao}",
-    "mt5": {
-      "registrado": ${user.mt5Registrado},
-      "id_conta": "${user.mt5IdConta}"
-    },
-    "licenca": {
-      "ativa": ${user.licencaAtiva},
-      "produto": "${user.licencaProduto}",
-      "plano": "${user.licencaPlano}",
-      "validade": "${user.licencaValidade}",
-      "ultima_renovacao": "${user.ultimaRenovacao}",
-      "total_renovacoes": ${user.totalRenovacoes},
-      "historico": ${user.historicoRenovacoes}
-    },
-    "reembolso": $reembolsoJson,
-    "auditoria": {
-      "ultimo_login": "${user.ultimaAtualizacao}",
-      "ultimo_dispositivo": "${user.deviceId}",
-      "tentativas_login": 0
-    },
-    "autorizacao": {
-      "status": "${user.autorizacaoStatus}",
-      "aprovado_por": "${user.autorizacaoAprovadoPor}",
-      "data_aprovacao": "${user.autorizacaoDataAprovacao}",
-      "motivo": ""
-    }
+    "ultima_renovacao": "${user.ultimaRenovacao}",
+    "total_renovacoes": ${user.totalRenovacoes},
+    "historico": ${user.historicoRenovacoes}
+  },
+  "reembolso": $reembolsoJson,
+  "auditoria": {
+    "ultimo_login": "${user.ultimaAtualizacao}",
+    "ultimo_dispositivo": "${user.deviceId}",
+    "tentativas_login": 0
+  },
+  "autorizacao": {
+    "status": "${user.autorizacaoStatus}",
+    "aprovado_por": "${user.autorizacaoAprovadoPor}",
+    "data_aprovacao": "${user.autorizacaoDataAprovacao}",
+    "motivo": ""
   }
 }
         """.trimIndent()
@@ -2582,10 +2582,18 @@ Você receberá uma nova notificação assim que o reembolso for processado.
 
     fun parseUserFromFirebaseMap(idUsuario: String, map: Map<String, Any?>): UserEntity? {
         try {
-            val root = org.json.JSONObject()
-            val userJson = mapToJsonObject(map)
-            root.put(idUsuario, userJson)
-            return parseUserFromJson(root.toString())
+            // Check if map is nested with idUsuario key (legacy format)
+            val effectiveMap = if (map.containsKey(idUsuario) && map[idUsuario] is Map<*, *>) {
+                @Suppress("UNCHECKED_CAST")
+                map[idUsuario] as Map<String, Any?>
+            } else {
+                map
+            }
+            val userJson = mapToJsonObject(effectiveMap)
+            if (!userJson.has("id_usuario")) {
+                userJson.put("id_usuario", idUsuario)
+            }
+            return parseUserFromJson(userJson.toString(), idUsuario)
         } catch (e: Exception) {
             Log.e(TAG, "Erro ao parsear usuario do Firebase map: ${e.message}")
             return null
@@ -2651,13 +2659,21 @@ Você receberá uma nova notificação assim que o reembolso for processado.
         return if (url.endsWith("/")) url.substring(0, url.length - 1) else url
     }
 
-    fun parseUserFromJson(jsonStr: String): UserEntity? {
+    fun parseUserFromJson(jsonStr: String, fallbackId: String = ""): UserEntity? {
         try {
             val root = org.json.JSONObject(jsonStr)
             val keys = root.keys()
             if (!keys.hasNext()) return null
-            val idUsuario = keys.next()
-            val obj = root.getJSONObject(idUsuario)
+            
+            // Check if root directly contains user properties or is wrapped in a key
+            val (idUsuario, obj) = if (root.has("id_usuario") || root.has("senha_hash") || root.has("numero") || root.has("nome") || root.has("licenca") || root.has("status") || root.has("id_transacao")) {
+                val id = root.optString("id_usuario", fallbackId.ifEmpty { root.optString("id", "") })
+                Pair(id, root)
+            } else {
+                val firstKey = keys.next()
+                val childObj = root.optJSONObject(firstKey) ?: root
+                Pair(firstKey, childObj)
+            }
             
             val status = obj.optString("status", "AGUARDANDO_ATIVACAO")
             val origem = obj.optString("origem", "sms_fimaster")
@@ -2700,7 +2716,7 @@ Você receberá uma nova notificação assim que o reembolso for processado.
             val creditoGuardado = obj.optDouble("credito_guardado", 0.0)
 
             return UserEntity(
-                idUsuario = idUsuario,
+                idUsuario = if (idUsuario.isNotEmpty()) idUsuario else fallbackId,
                 status = status,
                 origem = origem,
                 telefone = telefone,
