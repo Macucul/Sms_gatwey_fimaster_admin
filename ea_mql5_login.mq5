@@ -94,7 +94,8 @@ bool ExecutarAutenticacaoMql5(string mt5Id, string passwordSent)
    }
    
    // Extrai os campos de segurança: hash da senha e o sal (salt)
-   string senhaHashCompleta = ExtrairValorJson(userJson, "", "senhaHash");
+   // PADRÃO: chave JSON em Firebase é "senha_hash"
+   string senhaHashCompleta = ExtrairValorJson(userJson, "", "senha_hash");
    string salt = ExtrairValorJson(userJson, "", "salt");
    string validadeLicenca = ExtrairValorJson(userJson, "", "validadeLicenca");
    string statusLicenca = ExtrairValorJson(userJson, "", "statusLicenca");
@@ -111,7 +112,7 @@ bool ExecutarAutenticacaoMql5(string mt5Id, string passwordSent)
       hashEsperado = StringSubstr(senhaHashCompleta, 0, colonPos);
    }
    
-   // Se o sal do banco estiver vazio, tenta extrair a segunda parte do hash de senhaHash
+   // Se o sal do banco estiver vazio, tenta extrair a segunda parte do hash de senha_hash
    if(StringLen(salt) == 0 && colonPos >= 0) {
       salt = StringSubstr(senhaHashCompleta, colonPos + 1);
    }
